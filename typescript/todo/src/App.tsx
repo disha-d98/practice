@@ -1,64 +1,158 @@
-import { useState, type JSX } from 'react'
-import './App.css'
+import { useState, type JSX, useMemo, Children } from "react";
+import "./App.css";
 
-interface ToDoItem {
-  id: number,
-  text: string,
-  done: boolean
-}
+type PermissionNode = {
+  id: string;
+  label: string;
+  children?: PermissionNode[];
+};
+
+type CheckedState = boolean | "indeterminate"; 
+
+const defaultPermissions: PermissionNode[] = [
+  {
+    id: "admin",
+    label: "Admin",
+    children: [
+      { id: "admin.create", label: "Create" },
+      { id: "admin.delete", label: "Delete" },
+    ],
+  },
+  {
+    id: "reports",
+    label: "Reports",
+    children: [
+      {
+        id: "reports.view",
+        label: "View Reports",
+        children: [
+          { id: "reports.view.daily", label: "Daily" },
+          { id: "reports.view.monthly", label: "Monthly" },
+        ],
+      },
+      {
+        id: "reports.access",
+        label: "View Access",
+      },
+      {
+        id: "billings",
+        label: "Billings",
+        children: [
+          {
+            id: "billings.view",
+            label: "View billings",
+            children: [
+              { id: "billings.view.daily", label: "Daily" },
+              { id: "billings.view.monthly", label: "Monthly" },
+            ],
+          },
+        ],
+      },
+    ],
+    
+  },
+];
+
+const rootNodes = defaultPermissions.length > 0 ?  defaultPermissions : []
 
 function App(): JSX.Element {
-  const [toDos, setToDos] = useState<ToDoItem[]>([])
-  const count: number = toDos.length
-  const completedTodos = toDos.filter(todo => todo.done)
-
-  function addToDo(){    
-    const input: string = (document.getElementById('input') as HTMLInputElement)?.value ?? "";
-    const newToDo: ToDoItem = {
-      id: count + 1,
-      text: input,
-      done: false
-      }
-    setToDos([...toDos, newToDo])
-  }
-
-  const deleteItem = (item: ToDoItem): void => {
-    setToDos((toDos) => toDos.filter((toDo) => toDo.id !== item.id))
-  }
-
-  const markDone = (task: ToDoItem): void => {
-    setToDos((toDos) =>
-      toDos.map((toDo) =>
-        toDo.id === task.id ? { ...toDo, done: !toDo.done } : toDo
-      )
-    );
-    
-  }
+  const [checked, setChecked] = useState<Record<string, CheckedState>>({});
 
   return (
-    <>
-      <h1>TODO</h1>
-      <input type='text' placeholder='Enter To Do item' id='input'/>
-      <button onClick={addToDo}>Add</button>
-      
-      <h4>Your Tasks</h4>
-      {toDos.map((item: ToDoItem, idx: number) => <ToDoItem item={item} markDone={markDone} isEven={idx%2 === 0}/>)}
-
-      <h4>Done Tasks</h4>
-      {completedTodos.map((item: ToDoItem) => <ToDoItem item={item} deleteItem={deleteItem} />)}
-    </>
-  )
+    <div>
+      <PermissionsTree
+        permissions={defaultPermissions}
+        indent={0}
+        checked={checked}
+        setChecked={setChecked}
+      />
+    </div>
+  );
 }
 
-function ToDoItem(props: { item: ToDoItem, isEven?: boolean, deleteItem?: (item: ToDoItem) => void, markDone?: (item: ToDoItem) => void}): JSX.Element {
-
-  const { item, isEven, deleteItem, markDone } = props
-
-  return <div className={isEven ? 'even' : ''}>
-    {item.text}
-    {typeof deleteItem === "function" && <button onClick={_ => deleteItem?.(item)}>delete</button>}
-    {typeof markDone === "function" && <button onClick={_ => markDone?.(item)}>Done</button>}
-  </div>
+interface permissionsProps {
+  permissions: PermissionNode[];
+  indent: number;
+  checked: Record<string, CheckedState>;
+  setChecked: React.Dispatch<React.SetStateAction<Record<string, CheckedState>>>;
 }
 
-export default App
+
+function PermissionsTree(props: permissionsProps): JSX.Element {
+  const { permissions, indent, checked, setChecked } = props;
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    node: PermissionNode
+  ) => {
+    const id = node.id;
+    const checkedState = e.currentTarget.checked;
+
+    setChecked((curr) => {
+      const newState = { ...curr };
+      newState[id] = checkedState;
+
+      // changing the children
+      const updateChildren = (node: PermissionNode) =>{
+        if (node.children) {
+          node.children.forEach((child) => {
+            newState[child.id] = checkedState
+            updateChildren(child);
+          });
+        }
+      }
+      updateChildren(node);
+
+      const checkForChildren = (node: PermissionNode) => {
+        if (node.children) {
+          node.children.forEach((child) => checkForChildren(child))
+          const allChildrenChecked = node.children.filter(child => newState[child.id] === true);
+          newState[node.id] = allChildrenChecked.length === node.children.length ? true : allChildrenChecked.length === 0 ? false : "indeterminate";
+        }
+      }
+      let startNode = rootNodes.filter((rootNode) => rootNode["id"] === node.id.split('.')[0]);
+
+      if (startNode.length > 0) {
+          checkForChildren(startNode[0]);
+      }
+      return newState;
+    });
+  };
+
+  console.log(checked);
+
+  return (
+    <div>
+      {permissions.map((permission) => {
+        const nodeId = permission.id;
+        return (
+          <div className="indent">
+            <label>
+              <input
+                onChange={(e) => handleChange(e, permission)}
+                type="checkbox"
+                value={permission.id}
+                name={permission.label}
+                checked={checked.hasOwnProperty(nodeId) && checked[nodeId] === true}
+                ref={(el) => {
+                  if (el) el.indeterminate = checked[nodeId] === "indeterminate";
+                }}
+              />
+              {permission.label}
+            </label>
+            {permission.children && permission.children.length > 0 && (
+              <PermissionsTree
+                permissions={permission.children}
+                indent={indent + 1}
+                checked={checked}
+                setChecked={setChecked}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default App;
