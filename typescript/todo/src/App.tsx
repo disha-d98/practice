@@ -1,156 +1,76 @@
-import { useState, type JSX, useMemo, Children } from "react";
+import { useState, type JSX, useMemo, Children, useEffect } from "react";
 import "./App.css";
 
-type PermissionNode = {
-  id: string;
-  label: string;
-  children?: PermissionNode[];
-};
+const elements = "ABCDEFGHABCDEFGH";
+const chunkSize = 4;
 
-type CheckedState = boolean | "indeterminate"; 
-
-const defaultPermissions: PermissionNode[] = [
-  {
-    id: "admin",
-    label: "Admin",
-    children: [
-      { id: "admin.create", label: "Create" },
-      { id: "admin.delete", label: "Delete" },
-    ],
-  },
-  {
-    id: "reports",
-    label: "Reports",
-    children: [
-      {
-        id: "reports.view",
-        label: "View Reports",
-        children: [
-          { id: "reports.view.daily", label: "Daily" },
-          { id: "reports.view.monthly", label: "Monthly" },
-        ],
-      },
-      {
-        id: "reports.access",
-        label: "View Access",
-      },
-      {
-        id: "billings",
-        label: "Billings",
-        children: [
-          {
-            id: "billings.view",
-            label: "View billings",
-            children: [
-              { id: "billings.view.daily", label: "Daily" },
-              { id: "billings.view.monthly", label: "Monthly" },
-            ],
-          },
-        ],
-      },
-    ],
-    
-  },
-];
-
-const rootNodes = defaultPermissions.length > 0 ?  defaultPermissions : []
+const rows: string[] = [];
+for (let i = 0; i < elements.length / chunkSize; i++) {
+  rows[i] = elements.slice(i * chunkSize, i * chunkSize + chunkSize);
+}
 
 function App(): JSX.Element {
-  const [checked, setChecked] = useState<Record<string, CheckedState>>({});
+  let timeout: ReturnType<typeof setTimeout>;
+  const [visible, setVisible] = useState<Record<number, boolean>>({});
+
+  const gameWon = Object.keys(visible).length === elements.length && Object.values(visible).every((v) => v);
+
+  const [moveCounter, setMoveCounter] = useState<number>(0);
+  const totalMoves = Math.floor(moveCounter / 2);
+
+  const [currentPair, setCurrentPair] = useState<Array<number>>([-1 , -1]);
+
+  const toggleVisible = (index: number) => {
+    setVisible((prev) => {
+      const newVisible = { ...prev };
+      newVisible[index] = !newVisible[index];
+      return newVisible;
+      }
+    );
+
+    setMoveCounter(moveCounter + 1);
+    setCurrentPair((curr) => {
+      const newPair = [...curr];
+      newPair[moveCounter%2] = index;
+      return newPair;
+    })
+  }
+
+  useEffect(() => {
+    timeout = setTimeout(() => {
+      if (gameWon) {
+        alert("You won!");
+        clearTimeout(timeout);
+        return;
+      }
+      if(elements[currentPair[0]] !== elements[currentPair[1]]) {
+        setCurrentPair([-1, -1]);
+        setVisible((prev) => {
+          const newVisible = { ...prev };
+          newVisible[currentPair[0]] = false;
+          newVisible[currentPair[1]] = false;
+          return newVisible;
+        })
+      }else{
+        console.log("good going")
+      }
+
+    }, 2000);
+
+  }, [totalMoves])
 
   return (
     <div>
-      <PermissionsTree
-        permissions={defaultPermissions}
-        indent={0}
-        checked={checked}
-        setChecked={setChecked}
-      />
-    </div>
-  );
-}
-
-interface permissionsProps {
-  permissions: PermissionNode[];
-  indent: number;
-  checked: Record<string, CheckedState>;
-  setChecked: React.Dispatch<React.SetStateAction<Record<string, CheckedState>>>;
-}
-
-
-function PermissionsTree(props: permissionsProps): JSX.Element {
-  const { permissions, indent, checked, setChecked } = props;
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    node: PermissionNode
-  ) => {
-    const id = node.id;
-    const checkedState = e.currentTarget.checked;
-
-    setChecked((curr) => {
-      const newState = { ...curr };
-      newState[id] = checkedState;
-
-      // changing the children
-      const updateChildren = (node: PermissionNode) =>{
-        if (node.children) {
-          node.children.forEach((child) => {
-            newState[child.id] = checkedState
-            updateChildren(child);
-          });
-        }
-      }
-      updateChildren(node);
-
-      const checkForChildren = (node: PermissionNode) => {
-        if (node.children) {
-          node.children.forEach((child) => checkForChildren(child))
-          const allChildrenChecked = node.children.filter(child => newState[child.id] === true);
-          newState[node.id] = allChildrenChecked.length === node.children.length ? true : allChildrenChecked.length === 0 ? false : "indeterminate";
-        }
-      }
-      let startNode = rootNodes.filter((rootNode) => rootNode["id"] === node.id.split('.')[0]);
-
-      if (startNode.length > 0) {
-          checkForChildren(startNode[0]);
-      }
-      return newState;
-    });
-  };
-
-  console.log(checked);
-
-  return (
-    <div>
-      {permissions.map((permission) => {
-        const nodeId = permission.id;
+      {rows.map((row, r) => {
         return (
-          <div className="indent">
-            <label>
-              <input
-                onChange={(e) => handleChange(e, permission)}
-                type="checkbox"
-                value={permission.id}
-                name={permission.label}
-                checked={checked.hasOwnProperty(nodeId) && checked[nodeId] === true}
-                ref={(el) => {
-                  if (el) el.indeterminate = checked[nodeId] === "indeterminate";
-                }}
-              />
-              {permission.label}
-            </label>
-            {permission.children && permission.children.length > 0 && (
-              <PermissionsTree
-                permissions={permission.children}
-                indent={indent + 1}
-                checked={checked}
-                setChecked={setChecked}
-              />
-            )}
+          <div  className="rowContainer">
+            {row.split("").map((char, c) => (
+              <span onClick={() => toggleVisible((r*chunkSize + c))} className="block">{ visible[(r*chunkSize + c)] ===true ? char : " "}</span>
+            ))}
           </div>
         );
       })}
+      Moves: {totalMoves}
     </div>
   );
 }

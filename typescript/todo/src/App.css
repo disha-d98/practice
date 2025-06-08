@@ -44,3 +44,24 @@
 .indent{
   padding-left: 20px;
 }
+
+.rowContainer{
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.block{
+  display: block;
+  height: 40px;
+  width: 40px;
+  background-color: lightgray;
+  font-weight: 800;
+  font-size: 16px;
+  border-radius: 10px;
+  margin: 10px;
+  padding: 10px;
+  text-align: center;
+
+}
